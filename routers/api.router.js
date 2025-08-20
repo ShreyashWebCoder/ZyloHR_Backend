@@ -39,6 +39,7 @@ const {
     updateCommentOnFeed,
 } = require("../controllers/feed.controller");
 const upload = require("../middlewares/upload");
+const { getMessages, sendMessage, getConversation, markAsRead } = require("../controllers/messageCenter.controller");
 
 const router = express.Router();
 
@@ -68,6 +69,13 @@ router.post('/attendance/punch-out', authorizeRole("admin", "employee", "manager
 // Attendance Data Routes
 router.get('/attendance/today/:employeeId', authorizeRole("admin", "employee", "manager"), attendanceController.getTodayAttendance);
 router.get('/attendance/records/:employeeId', authorizeRole("admin", "employee", "manager"), attendanceController.getAttendanceRecords);
+
+// Message routes
+router.get("/messages", authMiddleware, getMessages);
+router.post("/messages", authMiddleware, sendMessage);
+router.get("/messages/conversation/:userId", authMiddleware, getConversation);
+router.put("/messages/read/:senderId", authMiddleware, markAsRead);
+
 
 // Leave Management
 router.get("/leaves", authorizeRole("admin", "employee", "manager"), getAllLeaves);
