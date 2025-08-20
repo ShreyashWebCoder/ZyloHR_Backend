@@ -39,7 +39,7 @@ const {
     updateCommentOnFeed,
 } = require("../controllers/feed.controller");
 const upload = require("../middlewares/upload");
-const { getMessages, sendMessage, getConversation, markAsRead } = require("../controllers/messageCenter.controller");
+const { getMessages, sendMessage, getConversation, markAsRead, getUnreadCount } = require("../controllers/messageCenter.controller");
 
 const router = express.Router();
 
@@ -75,7 +75,7 @@ router.get("/messages", authMiddleware, getMessages);
 router.post("/messages", authMiddleware, sendMessage);
 router.get("/messages/conversation/:userId", authMiddleware, getConversation);
 router.put("/messages/read/:senderId", authMiddleware, markAsRead);
-
+router.get("/messages/unread-count", authMiddleware, getUnreadCount);
 
 // Leave Management
 router.get("/leaves", authorizeRole("admin", "employee", "manager"), getAllLeaves);

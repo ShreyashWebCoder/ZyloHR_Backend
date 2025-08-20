@@ -1,21 +1,36 @@
 import Message from '../models/message.model.js'
 import User from '../models/user.model.js'
 
+
 export const getMessages = async (req, res) => {
     try {
-        const userId = req.user._id
-        const messages = await Message.find({
+        const userId = req.user._id;
+        const { conversationWith } = req.query;
+
+        let query = {
             $or: [{ sender: userId }, { receiver: userId }]
-        })
+        };
+
+        // If specific conversation is requested
+        if (conversationWith) {
+            query = {
+                $or: [
+                    { sender: userId, receiver: conversationWith },
+                    { sender: conversationWith, receiver: userId }
+                ]
+            };
+        }
+
+        const messages = await Message.find(query)
             .populate('sender', 'name avatar role')
             .populate('receiver', 'name avatar role')
-            .sort({ createdAt: -1 })
+            .sort({ createdAt: -1 });
 
-        res.status(200).json(messages)
+        res.status(200).json(messages);
     } catch (error) {
-        res.status(500).json({ message: error.message })
+        res.status(500).json({ message: error.message });
     }
-}
+};
 
 export const sendMessage = async (req, res) => {
     try {
@@ -26,11 +41,21 @@ export const sendMessage = async (req, res) => {
             return res.status(400).json({ message: 'Please provide all required fields' })
         }
 
+        // Get sender and receiver details
+        const sender = await User.findById(senderId);
+        const receiver = await User.findById(receiverId);
+
+        if (!sender || !receiver) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
         const message = new Message({
             sender: senderId,
             receiver: receiverId,
+            senderName: sender.name,
+            receiverName: receiver.name,
             content
-        })
+          });
 
         const savedMessage = await message.save()
         const populatedMessage = await Message.findById(savedMessage._id)
@@ -94,3 +119,18 @@ export const markAsRead = async (req, res) => {
         res.status(500).json({ message: error.message })
     }
 }
+
+export const getUnreadCount = async (req, res) => {
+    try {
+      const userId = req.user._id;
+      
+      const unreadCount = await Message.countDocuments({
+        receiver: userId,
+        read: false
+      });
+  
+      res.status(200).json({ unreadCount });
+    } catch (error) {
+      res.status(500).json({ message: error.message });
+    }
+  };

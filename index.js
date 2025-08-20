@@ -34,23 +34,26 @@ io.on("connection", (socket) => {
     console.log(`User ${userId} connected with socket ID: ${socket.id}`);
   });
 
-  socket.on("disconnect", () => {
-    console.log(`Client disconnected: ${socket.id}`);
-    for (const [userId, id] of connectedUsers.entries()) {
-      if (id === socket.id) {
-        connectedUsers.delete(userId);
-        console.log(`User ${userId} disconnected`);
-        break;
-      }
-    }
-  });
+
 
   // Handle private messages
   socket.io("privateMessage", async (data) => {
     try {
-      const { senderId, receiverId, content } = data;
+      const { senderId, receiverId, content, senderName, receiverName } = data;
 
-      const message = await saveMessageToDB(senderId, receiverId, content);
+      const message = await saveMessageToDB({
+        sender: senderId,
+        receiver: receiverId,
+        senderName,
+        receiverName,
+        content
+      });
+      const savedMessage = await message.save();
+
+      const populatedMessage = await Message.findById(savedMessage._id)
+        .populate('sender', 'name avatar role')
+        .populate('receiver', 'name avatar role');
+
 
       const receiverSocketId = connectedUsers.get(receiverId);
       if (receiverSocketId) {
@@ -62,6 +65,18 @@ io.on("connection", (socket) => {
     }
     catch (error) {
       console.error("Error handling private message:", error);
+    }
+  });
+
+  //Handle Disconnect
+  socket.on("disconnect", () => {
+    console.log(`Client disconnected: ${socket.id}`);
+    for (let [userId, socketId] of connectedUsers.entries()) {
+      if (socketId === socket.id) {
+        connectedUsers.delete(userId);
+        console.log(`User ${userId} disconnected`);
+        break;
+      }
     }
   });
 
