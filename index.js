@@ -11,9 +11,37 @@ const connectDB = require("./config/db");
 
 const verifyRoute = require("./routers/verify");
 const Message = require("./models/message.model");
+
+
+// Redis connection 
+const session = require("express-session");
+// const RedisStore = require("connect-redis").RedisStore;
+const connectRedis = require("connect-redis");
+const RedisStore = connectRedis(session);
+
+const client = require("./config/redisClient");
+
 const app = express();
 const server = http.createServer(app);
 
+// Redis session
+app.use(
+  session({
+    store: new RedisStore({
+      client,
+    }),
+    secret: process.env.SESSION_SECRET,
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      secure: false,   // true if using https
+      httpOnly: true,
+      maxAge: 1000 * 60 * 10, // 10 minutes
+    },
+  })
+);
+
+// Socket.IO
 const io = socketIo(server, {
   cors: {
     origin: "*",
@@ -48,19 +76,19 @@ io.on("connection", (socket) => {
         receiverName,
         content
       });
-      const savedMessage = await message.save();
+      // const savedMessage = await message.save();
 
-      const populatedMessage = await Message.findById(savedMessage._id)
+      const populatedMessage = await Message.findById(message._id)
         .populate('sender', 'name avatar role')
         .populate('receiver', 'name avatar role');
 
 
       const receiverSocketId = connectedUsers.get(receiverId);
       if (receiverSocketId) {
-        io.to(receiverSocketId).emit("newMessage", message);
+        io.to(receiverSocketId).emit("newMessage", populatedMessage);
       }
 
-      socket.emit("messageSent", message);
+      socket.emit("messageSent", populatedMessage);
       console.log(`Message sent from ${senderId} to ${receiverId}: ${content}`);
     }
     catch (error) {
@@ -68,35 +96,22 @@ io.on("connection", (socket) => {
     }
   });
 
-  //Handle Disconnect
-  socket.on("disconnect", () => {
-    console.log(`Client disconnected: ${socket.id}`);
-    for (let [userId, socketId] of connectedUsers.entries()) {
-      if (socketId === socket.id) {
-        connectedUsers.delete(userId);
-        console.log(`User ${userId} disconnected`);
-        break;
-      }
-    }
-  });
-
   // Handle typing indicators
   socket.on("typing", (data) => {
-    const { receiverId, isTyping } = data;
+    const { receiverId, senderId, isTyping } = data;
     const receiverSocketId = connectedUsers.get(receiverId);
     if (receiverSocketId) {
       io.to(receiverSocketId).emit("userTyping", {
-        senderId: data.senderId,
+        senderId,
         isTyping
       });
     }
   });
 
-  // Handle disconnect
+  //Handle Disconnect
   socket.on("disconnect", () => {
     console.log(`Client disconnected: ${socket.id}`);
 
-    // Remove user from connectedUsers map
     for (let [userId, socketId] of connectedUsers.entries()) {
       if (socketId === socket.id) {
         connectedUsers.delete(userId);
@@ -144,27 +159,25 @@ const PORT = process.env.PORT || 8000;
 //  Server Start
 app.listen(PORT, '0.0.0.0', () => {
   connectDB();
-  console.log(`Server is ruuning up ! PORT : ${PORT}`);
+  console.log(`🚀 Server is ruuning up ! PORT : ${PORT}`);
 });
 
 
-async function saveMessageToDB(senderId, receiverId, content) {
+// Save message to DB
+async function saveMessageToDB({ sender, receiver, senderName, receiverName, content }) {
   try {
     const message = new Message({
       _id: Date.now().toString(),
-      sender: senderId,
-      receiver: receiverId,
+      sender,
+      receiver,
+      senderName,
+      receiverName,
       content,
-      timestamp: new Date()
+      timestamp: new Date(),
     });
-
-    const savedMessage = await message.save();
-    console.log("Message saved to DB:", savedMessage);
-
-    return savedMessage;
+    return await message.save();
   } catch (error) {
     console.error("Error saving message to DB:", error);
     throw error;
   }
-
 }
